@@ -16,11 +16,11 @@ app = FastAPI()
 
 @app.get("/news/")
 async def get_news(
-    keywords: str,
-    sources: str,
+    keywords: list[str],
+    sources: list[str],
 ) -> NewsResponse:
 
     return collector_controller.get_news(
-        sources=[sources],
-        keywords=[keywords],
+        sources=sources,
+        keywords=keywords,
     )
