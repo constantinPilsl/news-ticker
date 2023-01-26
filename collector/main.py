@@ -30,6 +30,6 @@ async def get_news(
             response=response.dict(),
         ),
     )
-    logger.debug(tracking_event.json())
+    logger.info(tracking_event.json())
 
     return response
