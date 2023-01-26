@@ -1,19 +1,17 @@
-import logging
-from pathlib import Path
-from typing import Generator, Literal, Iterable
+from typing import Generator, Iterable, Literal
 
-import yaml
-
+from collector.data_source_gateways.tagesschau.api.wrapper import (
+    get_news as tagesschau_get_news,
+)
+from collector.logging.logger import logger
 from collector.models.news import News
 from collector.services.is_keywords_in_news import is_keywords_in_news
-from collector.data_source_gateways.tagesschau.api.wrapper import get_news as tagesschau_get_news
 
 
 def get_news(sources: list[str], keywords: list[str]):
-
     def get_relevant_news(
         many_news: Iterable[News],
-        keywords: list,
+        keywords: list[str],
         filters: dict[Literal["title", "sub_title", "tags", "text"], bool] = {
             "title": True,
             "sub_title": True,
@@ -21,15 +19,19 @@ def get_news(sources: list[str], keywords: list[str]):
             "text": False,
         },
     ) -> Generator[News, None, None]:
-        logging.debug("get_relevant_news()")
+
+        logger.debug("get_relevant_news()")
         return (
             news for news in many_news if is_keywords_in_news(news, keywords, filters)
         )
 
-    logging.debug("get_news()")
+    logger.debug("get_news()")
 
     # TODO:  Dynamic source selection to be implemented
     """
+    from pathlib import Path
+    import yaml
+
     news_sources = yaml.safe_load(Path("resources/news_sources.yml").read_text())
     available_sources = []
 
@@ -37,7 +39,7 @@ def get_news(sources: list[str], keywords: list[str]):
         try:
             available_sources.append(news_sources["news_sources"][source])
         except KeyError:
-            logging.warning(f"WARNING!  News Source not found:  {source}")
+            logger.warning(f"WARNING!  News Source not found:  {source}")
 
     if available_sources:
         for source in available_sources:
