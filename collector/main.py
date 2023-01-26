@@ -3,7 +3,8 @@ from typing import Union
 from fastapi import FastAPI, Query
 
 import collector.collector_service as collector_service
-from collector.logging.logger import logger
+import collector.models.tracking_events.api_call as api_call
+from collector.logging.logger import logger, session_id
 from collector.models.news_response import NewsResponse
 
 app = FastAPI()
@@ -15,9 +16,20 @@ async def get_news(
     sources: Union[list[str], None] = Query(default=["tagesschau"]),
 ) -> NewsResponse:
 
-    logger.debug("get_news()")
-    logger.debug(f"Sources:  {sources}")
-    logger.debug(f"Type Sources:  {type(sources)}")
-    logger.debug(f"keywords:  {keywords}")
-    logger.debug(f"Type keywords:  {type(keywords)}")
-    return NewsResponse(response=list(collector_service.get_news(sources, keywords)))
+    logger.info("apiCall:  GET/news/")
+    response = NewsResponse(response=list(collector_service.get_news(sources, keywords)))
+
+    tracking_event = api_call.ApiCall(
+        event_name="get_news",
+        correlation_id=session_id,
+        data=api_call.ApiCallData(
+            request={
+                "keywords": keywords,
+                "sources": sources,
+            },
+            response=response.dict(),
+        ),
+    )
+    logger.debug(tracking_event.json())
+
+    return response

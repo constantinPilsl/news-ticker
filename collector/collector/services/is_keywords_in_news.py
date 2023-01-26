@@ -9,7 +9,7 @@ def unify_filter_target(
     filter_target: Union[list[str], str, None]
 ) -> Union[list[str], None]:
     """Transforms input into list of lowercase strings."""
-    logger.debug("functionCall:  unify_filter_target()")
+    logger.info("functionCall:  unify_filter_target()")
 
     if filter_target is None:
         unified_filter_target = None
@@ -42,7 +42,7 @@ def is_keywords_in_filter_target(
     keywords: list[str],
     filter_target: Union[list[str], None],
 ) -> Union[bool, None]:
-    logger.debug("functionCall:  is_keywords_in_filter_target()")
+    logger.info("functionCall:  is_keywords_in_filter_target()")
 
     # Alternative version that returns keyword matches
     # [word for word in filter_target if any(keyword in word for keyword in keywords)] or False
@@ -90,7 +90,7 @@ def is_keywords_in_news(
 
     A filter object can be for example the title.
     """
-    logger.debug("functionCall:  is_keywords_in_news()")
+    logger.info("functionCall:  is_keywords_in_news()")
 
     news_dict = news.dict()
     filter_keys = [k for k, v in filters.items() if v]
