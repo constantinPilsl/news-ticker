@@ -1,8 +1,6 @@
 from typing import Generator, Iterable, Literal
 
-from collector.data_source_gateways.tagesschau.api.wrapper import (
-    get_news as tagesschau_get_news,
-)
+import collector.data_source_gateways.tagesschau.api.tagesschau as tagesschau_gateway
 from collector.logging.logger import logger
 from collector.models.news import News
 from collector.services.is_keywords_in_news import is_keywords_in_news
@@ -46,5 +44,20 @@ def get_news(sources: list[str], keywords: list[str]):
             news_sources["news_sources"][source]
     """
 
-    many_news = tagesschau_get_news()
+    many_news = tagesschau_gateway.get_news()
     return get_relevant_news(many_news, keywords)
+
+def get_keywords(sources: list[str]) -> Generator[str, None, None]:
+    # TODO:  Consider to add the option to pre-filter the tags by using
+    # just the tags from relevant articles
+    logger.debug("get_news()")
+
+    # Get official tags from tagesschau
+    many_news = tagesschau_gateway.get_news()
+
+    all_tags = (news.tags for news in many_news if news.tags is not None)
+    all_tags_flattened = (tag for sublist in all_tags for tag in sublist)
+
+    unique_tags = sorted(list(set(all_tags_flattened)))
+
+    return unique_tags

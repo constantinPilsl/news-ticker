@@ -35,3 +35,12 @@ async def get_news(
     logger.info(tracking_event.json(ensure_ascii=False))
 
     return response
+
+
+@app.get("/keywords/")
+async def get_keywords(
+    sources: Union[list[str], None] = Query(default=["tagesschau"]),
+) -> list[str]:
+
+    logger.info("apiCall:  GET/keywords/")
+    return collector_service.get_keywords(sources)
