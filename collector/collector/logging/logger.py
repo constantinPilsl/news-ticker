@@ -9,7 +9,7 @@ logging.basicConfig(
     ),
     level=logging.INFO,
     datefmt="%Y-%m-%d %I:%M:%S",
-    filename="logs/application_logs",
+    filename="logs/application_logs.log",
     filemode="a",
 )
 

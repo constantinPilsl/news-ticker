@@ -1,0 +1,12 @@
+---
+env: "dev"
+collector:
+  version: "/v1"
+  url: http://127.0.0.1:8000
+  endpoints:
+    news: "/news"
+publisher:
+  url: https://ntfy.sh
+  topics:
+    prd: "/news-ticker"
+    dev: "/news-ticker-dev"

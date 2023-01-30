@@ -17,7 +17,9 @@ async def get_news(
 ) -> NewsResponse:
 
     logger.info("apiCall:  GET/news/")
-    response = NewsResponse(response=list(collector_service.get_news(sources, keywords)))
+    response = NewsResponse(
+        response=list(collector_service.get_news(sources, keywords))
+    )
 
     tracking_event = api_call.ApiCall(
         event_name="get_news",
@@ -30,6 +32,6 @@ async def get_news(
             response=response.dict(),
         ),
     )
-    logger.info(tracking_event.json())
+    logger.info(tracking_event.json(ensure_ascii=False))
 
     return response
