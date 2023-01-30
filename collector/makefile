@@ -3,3 +3,5 @@ run-dev:
 
 test:
 	python -m unittest test
+cleanup:
+	rm -r logs/application_logs.log
