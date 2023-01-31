@@ -47,6 +47,7 @@ def get_news(sources: list[str], keywords: list[str]):
     many_news = tagesschau_gateway.get_news()
     return get_relevant_news(many_news, keywords)
 
+
 def get_keywords(sources: list[str]) -> Generator[str, None, None]:
     # TODO:  Consider to add the option to pre-filter the tags by using
     # just the tags from relevant articles
