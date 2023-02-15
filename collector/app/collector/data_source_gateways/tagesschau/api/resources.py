@@ -1,15 +1,4 @@
 
-name = "tagesschau"
-
-url = "https://www.tagesschau.de/api2"
-
-endpoints = {
-    "homepage": "/homepage",
-    "news": "/news",
-    "newsfeed": "/newsfeed-101~_date-{date}.json",  # yymmdd format
-}
-
-
 ressorts_and_topics = [
     "inland",
     "ausland",

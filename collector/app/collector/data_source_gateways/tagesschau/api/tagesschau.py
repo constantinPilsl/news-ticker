@@ -1,6 +1,6 @@
 from typing import Iterable
 
-from collector.data_source_gateways.tagesschau.api.client import Client
+from collector.data_source_gateways.tagesschau.api.gateway import TagesschauGateway
 from collector.data_source_gateways.tagesschau.api.parser import (
     parse_news_all,
 )
@@ -12,7 +12,7 @@ def get_news() -> Iterable[News]:
         returns parsed news.
     """
 
-    client = Client()
+    client = TagesschauGateway()
     news = client.get_news()
 
     return parse_news_all(news)

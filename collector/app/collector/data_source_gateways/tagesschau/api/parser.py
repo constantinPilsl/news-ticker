@@ -2,12 +2,14 @@ import logging
 from datetime import datetime
 from typing import Iterable, Union
 
-from collector.data_source_gateways.tagesschau.api.resources import name as source
 from collector.models.news import News
 
 
 def parse_news(news_raw: dict) -> News:
     """Parse dict of individual news article."""
+
+    # TODO:  Should come from somewhere else
+    source = "tagesschau"
 
     def parse_tags(tags: list[dict]) -> list[Union[str, None]]:
         """Unpacks list of {"tag": "value"} pairs and returns list
