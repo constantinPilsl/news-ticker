@@ -9,7 +9,7 @@ config = Config()
 
 
 keywords = [
-    "ukraine",
+    "litauen",
 ]
 
 news_response = collector_gateway.get_news(
