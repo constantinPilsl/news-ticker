@@ -27,12 +27,15 @@ API_TOKEN = os.environ["TELEGRAM_NEWS_TICKER_DEV_BOT_TOKEN"]
 
 
 class DialogSG(StatesGroup):
-    greeting = State()
+    start = State()
+    main_menu = State()
     finish = State()
-    select_keywords = State()
+    get_news = State()
+    set_keywords = State()
+    list_keywords = State()
 
 
-async def get_data(dialog_manager: DialogManager, **kwargs):
+async def get_keywords_data(dialog_manager: DialogManager, **kwargs):
     keywords = dialog_manager.current_context().dialog_data.get("keywords", None)
     return {
         "keywords": keywords,
@@ -68,7 +71,7 @@ async def on_finish(c: CallbackQuery, button: Button, manager: DialogManager):
     if manager.is_preview():
         await manager.done()
         return
-    await c.message.answer("Thank you. To start again click /start")
+    await c.message.answer("Thank you. To start again click /set-keywords")
     await manager.done()
 
 
@@ -78,22 +81,54 @@ multiselect = Multiselect(
     checked_text=Format("✓ {item[0]}"),
     unchecked_text=Format("{item[0]}"),
     id="mselect",
-    # item_id_getter=itemgetter(0),
     item_id_getter=itemgetter(1),
     items=items,
 )
 
 dialog = Dialog(
     Window(
+        SwitchTo(
+            Const("Greetings! Please, introduce yourself:"),
+            id="start",
+            state=DialogSG.main_menu,
+        ),
+        state=DialogSG.start,
+    ),
+    # Window(
+    #     Row(
+    #         Button(Const("Get News"), id="get_news"),  # TODO:  SwitchTo ones it is implemented
+    #         SwitchTo(Const("Start >"), id="start", state=DialogSG.main_menu),
+    #     ),
+    #     state=DialogSG.start,
+    # ),
+    Window(
+        Row(
+            Button(
+                Const("Get News"), id="get_news"
+            ),  # TODO:  SwitchTo ones it is implemented
+            SwitchTo(
+                Const("Set Keywords"), id="set_keywords", state=DialogSG.set_keywords
+            ),
+            SwitchTo(
+                Const("List Keywords"), id="list_keywords", state=DialogSG.list_keywords
+            ),
+        ),
+        Row(
+            Back(),
+            SwitchTo(Const("Home"), id="start", state=DialogSG.start),
+        ),
+        state=DialogSG.main_menu,
+    ),
+    Window(
         Const("Please select your keywords:"),
         multiselect,
         Row(
             Back(),
-            SwitchTo(Const("Restart"), id="restart", state=DialogSG.select_keywords),
+            SwitchTo(Const("Restart"), id="restart", state=DialogSG.set_keywords),
             Button(Const("Submit"), on_click=on_submit, id="submit"),
         ),
-        getter=get_data,
-        state=DialogSG.select_keywords,
+        getter=get_keywords_data,
+        state=DialogSG.set_keywords,
     ),
     Window(
         Multi(
@@ -102,10 +137,10 @@ dialog = Dialog(
         ),
         Row(
             Back(),
-            SwitchTo(Const("Restart"), id="restart", state=DialogSG.select_keywords),
+            SwitchTo(Const("Restart"), id="restart", state=DialogSG.set_keywords),
             Button(Const("Finish"), on_click=on_finish, id="finish"),
         ),
-        getter=get_data,
+        getter=get_keywords_data,
         state=DialogSG.finish,
     ),
 )
@@ -113,7 +148,7 @@ dialog = Dialog(
 
 async def start(m: Message, dialog_manager: DialogManager):
     # it is important to reset stack because user wants to restart everything
-    await dialog_manager.start(DialogSG.select_keywords, mode=StartMode.RESET_STACK)
+    await dialog_manager.start(DialogSG.start, mode=StartMode.RESET_STACK)
 
 
 async def main():
