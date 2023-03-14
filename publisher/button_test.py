@@ -2,50 +2,44 @@ import asyncio
 import logging
 import os
 from operator import itemgetter
-from typing import Any, Union
+from typing import Union
 
 from aiogram import Bot, Dispatcher
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
-from aiogram_dialog import (
-    ChatEvent,
-    Dialog,
-    DialogManager,
-    DialogRegistry,
-    StartMode,
-    Window,
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
 )
+from aiogram_dialog import Dialog, DialogManager, DialogRegistry, StartMode, Window
 from aiogram_dialog.manager.protocols import ManagedDialogAdapterProto
 from aiogram_dialog.widgets.input import MessageInput
 from aiogram_dialog.widgets.kbd import (
     Back,
     Button,
-    Group,
     Multiselect,
     Row,
-    Select,
     ScrollingGroup,
     SwitchTo,
+    Url,
 )
-from aiogram_dialog.widgets.text import Const, Format, Multi
+from aiogram_dialog.widgets.text import Const, Format
+from config import Config
 
+import publisher.data_source_gateways.collector.collector as collector_gateway
+from publisher.publisher_service import publish_news
+
+config = Config()
 
 API_TOKEN = os.environ["TELEGRAM_NEWS_TICKER_DEV_BOT_TOKEN"]
 
-application_data = {
-    "items": [
-        "Ukraine",
-        "USA",
-        "Deutschland",
-        "Technologie",
-        "Silion Valley",
-        "Hard Rock Cafe",
-    ],
-}
-
 user_data = {
-    "keywords": None,
+    # "keywords": set(),
+    "keywords": {
+        "ukraine",
+    },
 }
 
 
@@ -54,57 +48,146 @@ class DialogSG(StatesGroup):
     main_menu = State()
     finish = State()
     get_news = State()
-    add_keywords = State()
+    browse = State()
     edit_keywords = State()
+    add_keyword = State()
 
+
+class UserGateway:
+    def get_keywords() -> set[str]:
+        return user_data["keywords"]
 
 
 # CONTROLLER
 async def get_keywords_enumerated(dialog_manager: DialogManager, **kwargs):
-    enumerated_keywords = [(item, i) for i, item in enumerate(application_data["items"])]
+    keywords_response = collector_gateway.get_keywords(
+        sources=["tagesschau"],
+        url=config.collector["url"],
+        endpoint=config.collector["endpoints"]["keywords"],
+        session_id=config.session_id,
+    )
+
+    keywords_enumerated = [(item, i) for i, item in enumerate(keywords_response)]
     return {
-        "enumerated_keywords": enumerated_keywords,
+        "keywords_enumerated": list(keywords_enumerated),
     }
 
 
 async def get_user_keywords(dialog_manager: DialogManager, **kwargs):
+    user_keywords = UserGateway.get_keywords()
+
     return {
-        "user_keywords": user_data["keywords"],
+        "user_keywords": user_keywords,
     }
 
 
 async def get_user_keywords_enumerated(dialog_manager: DialogManager, **kwargs):
-    user_keywords_enumerated = [(item, i) for i, item in enumerate(user_data["keywords"])]
+    user_keywords = UserGateway.get_keywords()
+    user_keywords_enumerated = [(item, i) for i, item in enumerate(user_keywords)]
     return {
         "user_keywords_enumerated": user_keywords_enumerated,
     }
 
 
 # EVENT HANDLERS
-async def on_submit(c: CallbackQuery, button: Button, manager: DialogManager):
-    if manager.is_preview():
-        await manager.done()
+async def add_keyword_handler(
+    m: Message, dialog: ManagedDialogAdapterProto, dialog_manager: DialogManager
+):
+    if dialog_manager.is_preview():
+        await dialog.next()
         return
 
-    mselect = manager.current_context().widget_data["mselect"]
+    user_data["keywords"].add(m.text)
+    await m.answer(f"{m.text} was added to your keywords.")
+    await dialog_manager.done()
+
+
+async def on_submit_browse_keywords(
+    c: CallbackQuery, button: Button, dialog_manager: DialogManager
+):
+    if dialog_manager.is_preview():
+        await dialog_manager.done()
+        return
+
+    mselect = dialog_manager.current_context().widget_data["mselect"]
     selected_ids = [int(id) for id in mselect]
 
-    item_id_mapping = ((i, item) for i, item in enumerate(application_data["items"]))
-    user_data["keywords"] = [i[1] for i in item_id_mapping if i[0] in selected_ids]
+    # TODO: This should not be a separate request and it does not work for editing keywords
+    keywords_response = collector_gateway.get_keywords(
+        sources=["tagesschau"],
+        url=config.collector["url"],
+        endpoint=config.collector["endpoints"]["keywords"],
+        session_id=config.session_id,
+    )
 
-    item_id_str = ", ".join([i for i in user_data.get("keywords")])
-    logging.info(f"Keyword ids set to:  {item_id_str}")
+    item_id_mapping = ((i, item) for i, item in enumerate(keywords_response))
+    user_data["keywords"].update(
+        [i[1] for i in item_id_mapping if i[0] in selected_ids]
+    )
 
-    await c.message.answer(f"Your keywords have been set to: {item_id_str}")
-    await manager.done()
+    keyword_id_str = ", ".join(user_data["keywords"])
+    logging.info(f"Keyword ids set to:  {keyword_id_str}")
+
+    await c.message.answer(f"Your keywords have been set to: {keyword_id_str}")
+    await dialog_manager.done()
 
 
-async def on_finish(c: CallbackQuery, button: Button, manager: DialogManager):
-    if manager.is_preview():
-        await manager.done()
+async def on_submit_edit_keywords(
+    c: CallbackQuery, button: Button, dialog_manager: DialogManager
+):
+    if dialog_manager.is_preview():
+        await dialog_manager.done()
         return
-    # await c.message.answer("Fuck you!")
-    await manager.done()
+
+    mselect = dialog_manager.current_context().widget_data["mselect"]
+
+    selected_ids = [int(id) for id in mselect]
+    keyword_id_mapping = ((i, item) for i, item in enumerate(user_data["keywords"]))
+    user_data["keywords"] = [i[1] for i in keyword_id_mapping if i[0] in selected_ids]
+
+    keyword_id_str = ", ".join(user_data["keywords"])
+    logging.info(f"Keyword ids set to:  {keyword_id_str}")
+
+    await c.message.answer(f"Your keywords have been set to: {keyword_id_str}")
+    await dialog_manager.done()
+
+
+async def on_get_news(
+    c: CallbackQuery, button: Button, dialog_manager: DialogManager
+):
+    if dialog_manager.is_preview():
+        await dialog_manager.done()
+        return
+
+    logging.info("Getting news...")
+    user_keywords = UserGateway.get_keywords()
+    logging.info(f"For following keywords:  {user_keywords}")
+
+    news_response = collector_gateway.get_news(
+        keywords=user_keywords,
+        sources=["tagesschau"],
+        url=config.collector["url"],
+        endpoint=config.collector["endpoints"]["news"],
+        session_id=config.session_id,
+    )
+
+    for news in news_response:
+        title = news.title
+        url = news.url
+        logging.info(f"Send news for {title} with {url}")
+        url_button = InlineKeyboardButton(text=title, url=url)
+        reply_markup = InlineKeyboardMarkup().add(url_button)
+
+        await c.message.answer(text="———", reply_markup=reply_markup)
+
+    await dialog_manager.done()
+
+
+async def on_finish(c: CallbackQuery, button: Button, dialog_manager: DialogManager):
+    if dialog_manager.is_preview():
+        await dialog_manager.done()
+        return
+    await dialog_manager.done()
 
 
 # VIEWS
@@ -113,10 +196,12 @@ dialog = Dialog(
         Const("Start >"),
         Row(
             Button(
-                Const("Get News"), id="get_news"
+                Const("Get News"), id="get_news", on_click=on_get_news
             ),  # TODO:  SwitchTo ones it is implemented
             SwitchTo(
-                Const("Add Keywords"), id="add_keywords", state=DialogSG.add_keywords
+                Const("Browse"),
+                id="browse",
+                state=DialogSG.browse,
             ),
             SwitchTo(
                 Const("Edit Keywords"), id="edit_keywords", state=DialogSG.edit_keywords
@@ -124,8 +209,8 @@ dialog = Dialog(
         ),
         Row(
             Back(),
-            SwitchTo(Const("Home"), id="start", state=DialogSG.main_menu),
             Button(Const("End"), on_click=on_finish, id="finish"),
+            SwitchTo(Const("Home"), id="start", state=DialogSG.main_menu),
         ),
         state=DialogSG.main_menu,
     ),
@@ -137,19 +222,19 @@ dialog = Dialog(
                 unchecked_text=Format("{item[0]}"),
                 id="mselect",
                 item_id_getter=itemgetter(1),
-                items="enumerated_keywords",
+                items="keywords_enumerated",
             ),
             width=2,
             height=4,
-            id="add_keywords",
+            id="browse",
         ),
         Row(
             Back(),
-            Button(Const("✓ Submit"), on_click=on_submit, id="submit"),
             Button(Const("x Discard"), on_click=on_finish, id="finish"),
+            Button(Const("✓ Submit"), on_click=on_submit_browse_keywords, id="submit"),
         ),
         getter=get_keywords_enumerated,
-        state=DialogSG.add_keywords,
+        state=DialogSG.browse,
     ),
     Window(
         # TODO:  EDIT KEYWORDS SHOULD HAVE SELECTED KEYWORDS ALREADY CHECKED
@@ -164,15 +249,25 @@ dialog = Dialog(
             ),
             width=2,
             height=4,
-            id="add_keywords",
+            id="edit_kewords",
+        ),
+        Row(
+            SwitchTo(
+                Const("Add Keyword"), id="add_keyword", state=DialogSG.add_keyword
+            ),
         ),
         Row(
             Back(),
-            Button(Const("✓ Submit"), on_click=on_submit, id="submit"),
             Button(Const("x Discard"), on_click=on_finish, id="finish"),
+            Button(Const("✓ Submit"), on_click=on_submit_edit_keywords, id="submit"),
         ),
         getter=get_user_keywords_enumerated,
         state=DialogSG.edit_keywords,
+    ),
+    Window(
+        Const("Add keyword:"),
+        MessageInput(add_keyword_handler),
+        state=DialogSG.add_keyword,
     ),
 )
 
@@ -184,7 +279,7 @@ async def start(m: Message, dialog_manager: DialogManager):
 
 async def main():
     # real main
-    logging.basicConfig(level=logging.INFO)
+    # logging.basicConfig(level=logging.INFO)
     storage = MemoryStorage()
     bot = Bot(token=API_TOKEN)
     dp = Dispatcher(bot, storage=storage)
