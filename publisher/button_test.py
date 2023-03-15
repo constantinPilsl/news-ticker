@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 from operator import itemgetter
-from typing import Union
+from typing import Iterable, Union, Generator
 
 from aiogram import Bot, Dispatcher
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -36,10 +36,12 @@ config = Config()
 API_TOKEN = os.environ["TELEGRAM_NEWS_TICKER_DEV_BOT_TOKEN"]
 
 user_data = {
-    # "keywords": set(),
-    "keywords": {
-        "ukraine",
-    },
+    # "5806566314": {"keywords": set()},
+    # "5806566314": {
+    #     "keywords": {
+    #         "ukraine",
+    #     },
+    # },
 }
 
 
@@ -54,8 +56,49 @@ class DialogSG(StatesGroup):
 
 
 class UserGateway:
-    def get_keywords() -> set[str]:
-        return user_data["keywords"]
+    def exists_user_id(user_id: str) -> bool:
+        is_user_exists = True
+        if user_data.get(user_id) is None:
+            is_user_exists = False
+        logging.info(f"exists_user_id for {user_id}:  {is_user_exists}")
+        return is_user_exists
+
+    def create_user(user_id: str):
+        logging.info(f"Create user:  {user_id}")
+        if user_data.get("user_id") is None:
+            user_data[user_id] = {"keywords": set()}
+        else:
+            logging.warning(f"User already exists with id:  {user_id}")
+
+    def get_keywords(user_id: str) -> set[str]:  # TODO: SHOULD RATHER RETURN GENERATOR[str, None, None] or List
+        return user_data[user_id]["keywords"]
+
+    def create_keywords(
+        user_id: str,
+        keywords: Union[list[str], set[str], Generator[str, None, None], str, None],
+    ) -> None:
+        logging.info(f"create_keywords(), user_id:  {user_id}, keywords:  {keywords}")
+        if type(keywords) is str:
+            user_data[user_id]["keywords"] = {keywords}
+        elif keywords is None:
+            user_data[user_id]["keywords"] = set()
+        else:
+            user_data[user_id]["keywords"] = set(keywords)
+
+    def update_keywords(user_id: str, keywords: Union[Iterable[str], str]) -> None:
+        logging.info(f"update_keywords(), user_id:  {user_id}, keywords:  {keywords}")
+        if type(keywords) is str:
+            user_data[user_id]["keywords"].add(keywords)
+        else:
+            user_data[user_id]["keywords"].update(keywords)
+
+
+# HELPER
+def get_user_id_from_dialog_manager(dialog_manager: DialogManager) -> str:
+    logging.info("Get user id from dialog_manager")
+    user_id = str(dialog_manager.event["from"]["id"])
+    logging.debug(f"Got user_id from dialog_manager:  {user_id}")
+    return user_id
 
 
 # CONTROLLER
@@ -67,14 +110,15 @@ async def get_keywords_enumerated(dialog_manager: DialogManager, **kwargs):
         session_id=config.session_id,
     )
 
-    keywords_enumerated = [(item, i) for i, item in enumerate(keywords_response)]
+    keywords_enumerated = ((item, i) for i, item in enumerate(keywords_response))
     return {
         "keywords_enumerated": list(keywords_enumerated),
     }
 
 
 async def get_user_keywords(dialog_manager: DialogManager, **kwargs):
-    user_keywords = UserGateway.get_keywords()
+    user_id = get_user_id_from_dialog_manager(dialog_manager)
+    user_keywords = UserGateway.get_keywords(user_id)
 
     return {
         "user_keywords": user_keywords,
@@ -82,7 +126,9 @@ async def get_user_keywords(dialog_manager: DialogManager, **kwargs):
 
 
 async def get_user_keywords_enumerated(dialog_manager: DialogManager, **kwargs):
-    user_keywords = UserGateway.get_keywords()
+    user_id = get_user_id_from_dialog_manager(dialog_manager)
+
+    user_keywords = UserGateway.get_keywords(user_id)
     user_keywords_enumerated = [(item, i) for i, item in enumerate(user_keywords)]
     return {
         "user_keywords_enumerated": user_keywords_enumerated,
@@ -97,9 +143,12 @@ async def add_keyword_handler(
         await dialog.next()
         return
 
-    user_data["keywords"].add(m.text)
-    await m.answer(f"{m.text} was added to your keywords.")
-    await dialog_manager.done()
+    user_id = get_user_id_from_dialog_manager(dialog_manager)
+    keyword = m.text
+    UserGateway.update_keywords(user_id, keyword)
+
+    await m.answer(f"{keyword} has been added to your keywords.")
+    await dialog_manager.switch_to(state=DialogSG.main_menu)
 
 
 async def on_submit_browse_keywords(
@@ -109,8 +158,7 @@ async def on_submit_browse_keywords(
         await dialog_manager.done()
         return
 
-    mselect = dialog_manager.current_context().widget_data["mselect"]
-    selected_ids = [int(id) for id in mselect]
+    user_id = get_user_id_from_dialog_manager(dialog_manager)
 
     # TODO: This should not be a separate request and it does not work for editing keywords
     keywords_response = collector_gateway.get_keywords(
@@ -120,16 +168,19 @@ async def on_submit_browse_keywords(
         session_id=config.session_id,
     )
 
+    mselect = dialog_manager.current_context().widget_data["mselect"]
+    selected_ids = [int(id) for id in mselect]
     item_id_mapping = ((i, item) for i, item in enumerate(keywords_response))
-    user_data["keywords"].update(
-        [i[1] for i in item_id_mapping if i[0] in selected_ids]
-    )
+    new_keywords = (i[1] for i in item_id_mapping if i[0] in selected_ids)
 
-    keyword_id_str = ", ".join(user_data["keywords"])
+    UserGateway.update_keywords(user_id, new_keywords)
+    updated_keywords = UserGateway.get_keywords(user_id)
+
+    keyword_id_str = ", ".join(updated_keywords)
     logging.info(f"Keyword ids set to:  {keyword_id_str}")
 
     await c.message.answer(f"Your keywords have been set to: {keyword_id_str}")
-    await dialog_manager.done()
+    await dialog_manager.switch_to(state=DialogSG.main_menu)
 
 
 async def on_submit_edit_keywords(
@@ -139,28 +190,35 @@ async def on_submit_edit_keywords(
         await dialog_manager.done()
         return
 
+    user_id = get_user_id_from_dialog_manager(dialog_manager)
     mselect = dialog_manager.current_context().widget_data["mselect"]
 
+    keywords = keywords = UserGateway.get_keywords(user_id)
     selected_ids = [int(id) for id in mselect]
-    keyword_id_mapping = ((i, item) for i, item in enumerate(user_data["keywords"]))
-    user_data["keywords"] = [i[1] for i in keyword_id_mapping if i[0] in selected_ids]
+    keyword_id_mapping = (
+        (i, item) for i, item in enumerate(keywords)
+    )
+    keywords = (i[1] for i in keyword_id_mapping if i[0] in selected_ids)
 
-    keyword_id_str = ", ".join(user_data["keywords"])
+    UserGateway.create_keywords(user_id, keywords)
+    updated_keywords = UserGateway.get_keywords(user_id)
+
+    keyword_id_str = ", ".join(updated_keywords)
     logging.info(f"Keyword ids set to:  {keyword_id_str}")
 
     await c.message.answer(f"Your keywords have been set to: {keyword_id_str}")
-    await dialog_manager.done()
+    await dialog_manager.switch_to(state=DialogSG.main_menu)
 
 
-async def on_get_news(
-    c: CallbackQuery, button: Button, dialog_manager: DialogManager
-):
+async def on_get_news(c: CallbackQuery, button: Button, dialog_manager: DialogManager):
     if dialog_manager.is_preview():
         await dialog_manager.done()
         return
 
+    user_id = get_user_id_from_dialog_manager(dialog_manager)
+
     logging.info("Getting news...")
-    user_keywords = UserGateway.get_keywords()
+    user_keywords = UserGateway.get_keywords(user_id)
     logging.info(f"For following keywords:  {user_keywords}")
 
     news_response = collector_gateway.get_news(
@@ -178,9 +236,11 @@ async def on_get_news(
         url_button = InlineKeyboardButton(text=title, url=url)
         reply_markup = InlineKeyboardMarkup().add(url_button)
 
-        await c.message.answer(text="———", reply_markup=reply_markup)
+        await c.message.answer(
+            text="———", disable_notification=True, reply_markup=reply_markup
+        )
 
-    await dialog_manager.done()
+    await dialog_manager.switch_to(state=DialogSG.main_menu)
 
 
 async def on_finish(c: CallbackQuery, button: Button, dialog_manager: DialogManager):
@@ -192,8 +252,9 @@ async def on_finish(c: CallbackQuery, button: Button, dialog_manager: DialogMana
 
 # VIEWS
 dialog = Dialog(
+    # MAIN MENU
     Window(
-        Const("Start >"),
+        Const("~ NEWS TICKER ~"),
         Row(
             Button(
                 Const("Get News"), id="get_news", on_click=on_get_news
@@ -208,12 +269,12 @@ dialog = Dialog(
             ),
         ),
         Row(
-            Back(),
             Button(Const("End"), on_click=on_finish, id="finish"),
             SwitchTo(Const("Home"), id="start", state=DialogSG.main_menu),
         ),
         state=DialogSG.main_menu,
     ),
+    # BROWSE KEYWORDS
     Window(
         Const("Please select your keywords:"),
         ScrollingGroup(
@@ -229,13 +290,17 @@ dialog = Dialog(
             id="browse",
         ),
         Row(
-            Back(),
-            Button(Const("x Discard"), on_click=on_finish, id="finish"),
+            SwitchTo(
+                Const("x Discard"),
+                state=DialogSG.main_menu,
+                id="discard",
+            ),
             Button(Const("✓ Submit"), on_click=on_submit_browse_keywords, id="submit"),
         ),
         getter=get_keywords_enumerated,
         state=DialogSG.browse,
     ),
+    # EDIT KEYWORDS
     Window(
         # TODO:  EDIT KEYWORDS SHOULD HAVE SELECTED KEYWORDS ALREADY CHECKED
         Const("Your keywords are:"),
@@ -257,9 +322,16 @@ dialog = Dialog(
             ),
         ),
         Row(
-            Back(),
-            Button(Const("x Discard"), on_click=on_finish, id="finish"),
-            Button(Const("✓ Submit"), on_click=on_submit_edit_keywords, id="submit"),
+            SwitchTo(
+                Const("x Discard"),
+                state=DialogSG.main_menu,
+                id="discard",
+            ),
+            Button(
+                Const("✓ Submit"),
+                on_click=on_submit_edit_keywords,
+                id="submit",
+            ),
         ),
         getter=get_user_keywords_enumerated,
         state=DialogSG.edit_keywords,
@@ -276,10 +348,14 @@ async def start(m: Message, dialog_manager: DialogManager):
     # it is important to reset stack because user wants to restart everything
     await dialog_manager.start(DialogSG.main_menu, mode=StartMode.RESET_STACK)
 
+    user_id = get_user_id_from_dialog_manager(dialog_manager)
+
+    if not UserGateway.exists_user_id(user_id):
+        UserGateway.create_user(user_id)
+
 
 async def main():
     # real main
-    # logging.basicConfig(level=logging.INFO)
     storage = MemoryStorage()
     bot = Bot(token=API_TOKEN)
     dp = Dispatcher(bot, storage=storage)
