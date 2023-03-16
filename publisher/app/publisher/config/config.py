@@ -1,10 +1,9 @@
+import os
 from typing import Any, Literal, Union
 
 import yaml
-from pydantic import BaseModel
-
 from publisher.logging.logger import logger, session_id
-
+from pydantic import BaseModel
 
 class Config(BaseModel):
     session_id: str = session_id
@@ -12,6 +11,15 @@ class Config(BaseModel):
     collector: Union[dict, None]
     publisher: Union[dict, None]
     env: Union[Literal["prd", "dev"], None]
+    API_TOKEN = os.environ["TELEGRAM_NEWS_TICKER_DEV_BOT_TOKEN"]
+    # https://github.com/pydantic/pydantic/issues/182
+    # arbitrary_types_allowed = True
+    __instance = None
+
+    def __new__(cls):
+        if cls.__instance is None:
+            cls.__instance = super().__new__(cls)
+        return cls.__instance
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
