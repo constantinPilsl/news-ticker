@@ -2,13 +2,13 @@ from typing import Union
 
 from fastapi import FastAPI, Query
 
-import collector.collector_service as collector_service
+from collector.collector_service import CollectorService
 import collector.models.tracking_events.api_call as api_call
 from collector.logging.logger import logger, session_id
 from collector.models.news_response import NewsResponse
 
 app = FastAPI()
-
+collector_service = CollectorService()
 
 @app.get("/news/")
 async def get_news(

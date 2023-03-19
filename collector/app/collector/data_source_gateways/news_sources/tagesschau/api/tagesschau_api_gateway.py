@@ -2,10 +2,12 @@ import logging
 from typing import Union
 
 import requests
+from collector.data_source_gateways.news_source.base.base_news_api_gateway import BaseNewsApiGateway
 
 
-class TagesschauApiGateway:
-    def __init__(self):
+class TagesschauApiGateway(BaseNewsApiGateway):
+    def __init__(self, source, base_url):
+        super().__init__(source, base_url) 
         self.source: str = "tagesschau"
         self.base_url: str = "https://www.tagesschau.de/api2"
         self.session: Union[requests.Session, None] = self._create_session()
