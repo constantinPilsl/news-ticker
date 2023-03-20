@@ -4,7 +4,8 @@ collector:
   version: "/v1"
   # url: http://127.0.0.1:8000  # Local
   # url: http://0.0.0.0:8000  # Local docker
-  url: http://172.17.0.3:8000  # Local docker to docker
+  # url: http://172.17.0.3:8000  # Local docker to docker
+  url: https://collector-k2ritexgdq-ey.a.run.app  # Google Cloud Run
   endpoints:
     news: "/news"
     keywords: "/keywords"

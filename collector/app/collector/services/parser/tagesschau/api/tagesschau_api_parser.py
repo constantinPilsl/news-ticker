@@ -4,6 +4,7 @@ from typing import Generator, Iterable, Union
 
 from collector.models.news import News
 from collector.services.parser.base.base_parser import BaseParser
+from collector.services.parser.topic_mapping import TopicMapping
 
 
 class TagesschauApiParser(BaseParser):
@@ -29,7 +30,7 @@ class TagesschauApiParser(BaseParser):
             logging.debug("parse_tags()")
             return list(set([i["tag"].lower() for i in tags]))
 
-        logging.debug("parse_news()")
+        logging.debug("TagesschauApiParser.parse_news()")
         try:
             logging.debug(
                 f"Parse news from:  {self.source},  url:  {news_raw['detailsweb']}"
@@ -55,7 +56,7 @@ class TagesschauApiParser(BaseParser):
         return news
 
     def parse_news_many(self, many_news_raw: dict) -> Iterable[News]:
-        logging.debug("parse_news_many()")
+        logging.debug("TagesschauApiParser.parse_news_many()")
         return map(self.parse_news, many_news_raw["news"])
 
     def get_tags_many(self, many_news: Iterable[News]) -> list[str]:
